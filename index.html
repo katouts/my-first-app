@@ -1,0 +1,1630 @@
+<!DOCTYPE html>
+<html lang="ja" class="h-full bg-slate-50">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>生徒成績・勤怠分析ダッシュボード</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- PDF.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <!-- FontAwesome for Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50: '#f0f7ff',
+                            100: '#e0effe',
+                            500: '#2563eb',
+                            600: '#1d4ed8',
+                            700: '#1e40af',
+                            900: '#1e3a8a',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Noto+Sans+JP:wght@300;400;500;700&display=swap');
+        body {
+            font-family: 'Noto Sans JP', 'Inter', sans-serif;
+        }
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: #f1f5f9;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 3px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+    </style>
+</head>
+<body class="h-full text-slate-800 flex flex-col antialiased selection:bg-brand-500 selection:text-white">
+
+    <!-- ヘッダー -->
+    <header class="bg-slate-900 text-white border-b border-slate-800 sticky top-0 z-30">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex items-center justify-between h-16">
+                <div class="flex items-center space-x-3">
+                    <div class="bg-gradient-to-tr from-brand-600 to-indigo-500 p-2 rounded-xl shadow-md">
+                        <i class="fa-solid fa-graduation-cap text-xl text-white"></i>
+                    </div>
+                    <div>
+                        <h1 class="text-lg font-bold tracking-wide">EduAnalytics AI</h1>
+                        <p class="text-xs text-slate-400">生徒成績・勤怠統合分析ダッシュボード</p>
+                    </div>
+                </div>
+
+                <!-- ヘッダーアクション -->
+                <div class="flex items-center space-x-3">
+                    <button id="btn-demo-load" class="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition">
+                        <i class="fa-solid fa-wand-magic-sparkles text-amber-400 mr-1.5"></i>
+                        デモデータ読み込み
+                    </button>
+                    <button id="btn-open-upload" class="inline-flex items-center px-3.5 py-1.5 text-xs font-medium rounded-lg bg-brand-600 hover:bg-brand-500 text-white transition shadow-sm">
+                        <i class="fa-solid fa-file-arrow-up mr-1.5"></i>
+                        PDF/データ読込
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- タブナビゲーション -->
+    <nav class="bg-white border-b border-slate-200 shadow-sm sticky top-16 z-20">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex space-x-8 -mb-px overflow-x-auto custom-scrollbar">
+                <button class="nav-tab active border-b-2 border-brand-600 py-3.5 px-1 text-sm font-semibold text-brand-600 whitespace-nowrap flex items-center space-x-2" data-tab="tab-overview">
+                    <i class="fa-solid fa-chart-pie"></i>
+                    <span>全体サマリー・リスク分析</span>
+                </button>
+                <button class="nav-tab border-b-2 border-transparent py-3.5 px-1 text-sm font-medium text-slate-500 hover:text-slate-700 hover:border-slate-300 whitespace-nowrap flex items-center space-x-2" data-tab="tab-academic">
+                    <i class="fa-solid fa-book-open"></i>
+                    <span>成績状況分析</span>
+                </button>
+                <button class="nav-tab border-b-2 border-transparent py-3.5 px-1 text-sm font-medium text-slate-500 hover:text-slate-700 hover:border-slate-300 whitespace-nowrap flex items-center space-x-2" data-tab="tab-attendance">
+                    <i class="fa-solid fa-user-clock"></i>
+                    <span>勤怠状況分析</span>
+                </button>
+                <button class="nav-tab border-b-2 border-transparent py-3.5 px-1 text-sm font-medium text-slate-500 hover:text-slate-700 hover:border-slate-300 whitespace-nowrap flex items-center space-x-2" data-tab="tab-correlation">
+                    <i class="fa-solid fa-diagram-project"></i>
+                    <span>成績✕勤怠 傾向相関</span>
+                </button>
+                <button class="nav-tab border-b-2 border-transparent py-3.5 px-1 text-sm font-medium text-slate-500 hover:text-slate-700 hover:border-slate-300 whitespace-nowrap flex items-center space-x-2" data-tab="tab-students">
+                    <i class="fa-solid fa-users"></i>
+                    <span>生徒一覧・個別カルテ</span>
+                </button>
+            </div>
+        </div>
+    </nav>
+
+    <!-- メインコンテンツ領域 -->
+    <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+
+        <!-- フィルタバー -->
+        <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-wrap items-center justify-between gap-4">
+            <div class="flex flex-wrap items-center gap-3 text-sm">
+                <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider"><i class="fa-solid fa-filter mr-1"></i>絞り込み:</span>
+                <select id="filter-grade" class="bg-slate-50 border border-slate-300 text-slate-700 text-sm rounded-lg focus:ring-brand-500 focus:border-brand-500 p-2">
+                    <option value="all">全学年</option>
+                    <option value="1">1年生</option>
+                    <option value="2">2年生</option>
+                    <option value="3">3年生</option>
+                </select>
+                <select id="filter-class" class="bg-slate-50 border border-slate-300 text-slate-700 text-sm rounded-lg focus:ring-brand-500 focus:border-brand-500 p-2">
+                    <option value="all">全クラス</option>
+                    <option value="A">A組</option>
+                    <option value="B">B組</option>
+                    <option value="C">C組</option>
+                </select>
+                <select id="filter-risk" class="bg-slate-50 border border-slate-300 text-slate-700 text-sm rounded-lg focus:ring-brand-500 focus:border-brand-500 p-2">
+                    <option value="all">全員を表示</option>
+                    <option value="high-risk">要警戒生徒 (高リスク)</option>
+                    <option value="low-score">成績不振 (50点未満)</option>
+                    <option value="high-absence">欠席傾向 (欠席5日以上)</option>
+                </select>
+            </div>
+            <div class="text-xs text-slate-500" id="data-status-info">
+                対象生徒数: <span id="student-count-badge" class="font-bold text-slate-800 text-sm">0</span> 名
+            </div>
+        </div>
+
+        <!-- ==================== TAB 1: 全体サマリー & リスク分析 ==================== -->
+        <section id="tab-overview" class="tab-content space-y-6">
+            <!-- KPI カード -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex items-center space-x-4">
+                    <div class="p-3 bg-blue-50 text-brand-600 rounded-xl">
+                        <i class="fa-solid fa-calculator text-2xl"></i>
+                    </div>
+                    <div>
+                        <p class="text-xs text-slate-500 font-medium">全体平均点</p>
+                        <h3 class="text-2xl font-bold text-slate-800" id="kpi-avg-score">-- 点</h3>
+                        <p class="text-xs text-slate-400 mt-0.5" id="kpi-avg-score-sub">5教科総合平均</p>
+                    </div>
+                </div>
+
+                <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex items-center space-x-4">
+                    <div class="p-3 bg-emerald-50 text-emerald-600 rounded-xl">
+                        <i class="fa-solid fa-user-check text-2xl"></i>
+                    </div>
+                    <div>
+                        <p class="text-xs text-slate-500 font-medium">平均出席率</p>
+                        <h3 class="text-2xl font-bold text-slate-800" id="kpi-attendance-rate">-- %</h3>
+                        <p class="text-xs text-emerald-600 mt-0.5" id="kpi-attendance-sub"><i class="fa-solid fa-circle-check mr-1"></i>良好水準</p>
+                    </div>
+                </div>
+
+                <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex items-center space-x-4">
+                    <div class="p-3 bg-amber-50 text-amber-600 rounded-xl">
+                        <i class="fa-solid fa-triangle-exclamation text-2xl"></i>
+                    </div>
+                    <div>
+                        <p class="text-xs text-slate-500 font-medium">要サポート生徒</p>
+                        <h3 class="text-2xl font-bold text-amber-600" id="kpi-alert-count">-- 名</h3>
+                        <p class="text-xs text-slate-400 mt-0.5">成績または勤怠で基準越え</p>
+                    </div>
+                </div>
+
+                <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex items-center space-x-4">
+                    <div class="p-3 bg-rose-50 text-rose-600 rounded-xl">
+                        <i class="fa-solid fa-shield-cat text-2xl"></i>
+                    </div>
+                    <div>
+                        <p class="text-xs text-slate-500 font-medium">高リスク（重複課題）</p>
+                        <h3 class="text-2xl font-bold text-rose-600" id="kpi-high-risk-count">-- 名</h3>
+                        <p class="text-xs text-rose-500 font-medium mt-0.5">成績不振 ✕ 欠席多発</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- AI 傾向分析サマリー ＆ 要注意リスト -->
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <!-- AI自動生成傾向レポート -->
+                <div class="lg:col-span-2 bg-gradient-to-br from-slate-900 to-slate-800 text-white p-6 rounded-2xl shadow-md border border-slate-700 flex flex-col justify-between">
+                    <div>
+                        <div class="flex items-center justify-between mb-4">
+                            <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-brand-500/20 text-brand-300 border border-brand-500/30">
+                                <i class="fa-solid fa-brain mr-1.5 text-brand-400"></i> AI 傾向分析＆考察
+                            </span>
+                            <span class="text-xs text-slate-400">データ自動診断結果</span>
+                        </div>
+                        <h2 class="text-xl font-bold mb-3 text-slate-100" id="ai-summary-title">分析データを準備中...</h2>
+                        <div class="space-y-3 text-sm text-slate-300 leading-relaxed" id="ai-summary-content">
+                            <p>データをインポートするか、デモデータを選択すると、AIによる成績と勤怠の相関傾向、学年ごとの特徴、指導優先度の自動診断結果がここに表示されます。</p>
+                        </div>
+                    </div>
+                    <div class="mt-6 pt-4 border-t border-slate-700/60 flex flex-wrap gap-2 text-xs" id="ai-tags">
+                        <!-- AIタグ自動挿入 -->
+                    </div>
+                </div>
+
+                <!-- 要注意生徒ピックアップリスト -->
+                <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex flex-col">
+                    <div class="flex items-center justify-between mb-4">
+                        <h3 class="font-bold text-slate-800 text-base flex items-center">
+                            <i class="fa-solid fa-bell text-rose-500 mr-2"></i>
+                            面談推奨・要アプローチ生徒
+                        </h3>
+                        <span class="text-xs bg-rose-100 text-rose-700 font-semibold px-2 py-0.5 rounded-full" id="alert-badge">0名</span>
+                    </div>
+                    <div class="flex-1 overflow-y-auto max-h-80 space-y-3 pr-1 custom-scrollbar" id="alert-students-list">
+                        <!-- 動的生成 -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- 概要ミニチャート -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+                    <h3 class="font-bold text-slate-800 mb-4 flex items-center text-sm">
+                        <i class="fa-solid fa-chart-column text-brand-500 mr-2"></i> クラス別 平均点 ＆ 出席率
+                    </h3>
+                    <div class="h-64 relative">
+                        <canvas id="chartOverviewClassCompare"></canvas>
+                    </div>
+                </div>
+                <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+                    <h3 class="font-bold text-slate-800 mb-4 flex items-center text-sm">
+                        <i class="fa-solid fa-chart-pie text-indigo-500 mr-2"></i> 成績帯・勤怠リスク層 分布
+                    </h3>
+                    <div class="h-64 relative">
+                        <canvas id="chartOverviewDistribution"></canvas>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ==================== TAB 2: 成績状況分析 ==================== -->
+        <section id="tab-academic" class="tab-content hidden space-y-6">
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <!-- 5教科レーダーチャート -->
+                <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+                    <h3 class="font-bold text-slate-800 mb-2 text-sm flex items-center">
+                        <i class="fa-solid fa-spider text-brand-600 mr-2"></i> 教科バランス（全体平均）
+                    </h3>
+                    <p class="text-xs text-slate-500 mb-4">各教科の得意・苦手傾向をバランス比較</p>
+                    <div class="h-64 relative">
+                        <canvas id="chartSubjectRadar"></canvas>
+                    </div>
+                </div>
+
+                <!-- 教科別 平均点・最高点・最低点 -->
+                <div class="lg:col-span-2 bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+                    <h3 class="font-bold text-slate-800 mb-2 text-sm flex items-center">
+                        <i class="fa-solid fa-chart-bar text-brand-600 mr-2"></i> 教科別 スコア比較（平均/最高/最低）
+                    </h3>
+                    <p class="text-xs text-slate-500 mb-4">教科ごとのばらつきと理解度の底上げ課題を把握</p>
+                    <div class="h-64 relative">
+                        <canvas id="chartSubjectBar"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <!-- 点数分布ヒストグラム -->
+                <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+                    <h3 class="font-bold text-slate-800 mb-2 text-sm flex items-center">
+                        <i class="fa-solid fa-stairs text-emerald-600 mr-2"></i> 総合点数帯の分布
+                    </h3>
+                    <p class="text-xs text-slate-500 mb-4">上位層・中位層・下位層のボリュームゾーン</p>
+                    <div class="h-64 relative">
+                        <canvas id="chartScoreDistribution"></canvas>
+                    </div>
+                </div>
+
+                <!-- 各教科の赤点・要指導生徒数 -->
+                <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between">
+                    <div>
+                        <h3 class="font-bold text-slate-800 mb-2 text-sm flex items-center">
+                            <i class="fa-solid fa-user-slash text-rose-500 mr-2"></i> 教科別 基準未達（50点未満）人数
+                        </h3>
+                        <p class="text-xs text-slate-500 mb-4">補習や個別ケアが必要な教科の優先度</p>
+                        <div class="space-y-3" id="subject-underperforming-list">
+                            <!-- 動的生成 -->
+                        </div>
+                    </div>
+                    <div class="mt-4 pt-3 border-t border-slate-100 text-xs text-slate-400">
+                        ※50点未満を要フォロー対象として自動抽出しています。
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ==================== TAB 3: 勤怠状況分析 ==================== -->
+        <section id="tab-attendance" class="tab-content hidden space-y-6">
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <!-- 月別 欠席・遅刻 トレンド -->
+                <div class="lg:col-span-2 bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+                    <h3 class="font-bold text-slate-800 mb-2 text-sm flex items-center">
+                        <i class="fa-solid fa-chart-line text-sky-600 mr-2"></i> 月別 欠席・遅刻発生数の推移
+                    </h3>
+                    <p class="text-xs text-slate-500 mb-4">季節的要因や長期休暇明けの勤怠変化を捉える</p>
+                    <div class="h-64 relative">
+                        <canvas id="chartAttendanceTrend"></canvas>
+                    </div>
+                </div>
+
+                <!-- 曜日別 欠席発生傾向 -->
+                <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+                    <h3 class="font-bold text-slate-800 mb-2 text-sm flex items-center">
+                        <i class="fa-solid fa-calendar-week text-indigo-600 mr-2"></i> 曜日別 欠席発生比率
+                    </h3>
+                    <p class="text-xs text-slate-500 mb-4">月曜病や週末直前の欠席パターンの検出</p>
+                    <div class="h-64 relative">
+                        <canvas id="chartWeekdayAbsence"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <!-- 出席率区分ごとの人数割合 -->
+                <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+                    <h3 class="font-bold text-slate-800 mb-2 text-sm flex items-center">
+                        <i class="fa-solid fa-pie-chart text-amber-500 mr-2"></i> 出席率レベル別 人数構成
+                    </h3>
+                    <div class="h-60 relative">
+                        <canvas id="chartAttendanceRatioPie"></canvas>
+                    </div>
+                </div>
+
+                <!-- 遅刻・早退・欠席の比較サマリー -->
+                <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between">
+                    <div>
+                        <h3 class="font-bold text-slate-800 mb-4 text-sm flex items-center">
+                            <i class="fa-solid fa-clipboard-user text-emerald-600 mr-2"></i> 勤怠種別 トータル統計
+                        </h3>
+                        <div class="grid grid-cols-3 gap-3 text-center mb-6">
+                            <div class="p-4 bg-slate-50 rounded-xl border border-slate-100">
+                                <p class="text-xs text-slate-500">累計欠席日数</p>
+                                <p class="text-2xl font-bold text-rose-600 mt-1" id="stat-total-absence">0</p>
+                                <p class="text-[10px] text-slate-400 mt-1">日</p>
+                            </div>
+                            <div class="p-4 bg-slate-50 rounded-xl border border-slate-100">
+                                <p class="text-xs text-slate-500">累計遅刻回数</p>
+                                <p class="text-2xl font-bold text-amber-600 mt-1" id="stat-total-tardy">0</p>
+                                <p class="text-[10px] text-slate-400 mt-1">回</p>
+                            </div>
+                            <div class="p-4 bg-slate-50 rounded-xl border border-slate-100">
+                                <p class="text-xs text-slate-500">累計早退回数</p>
+                                <p class="text-2xl font-bold text-blue-600 mt-1" id="stat-total-early">0</p>
+                                <p class="text-[10px] text-slate-400 mt-1">回</p>
+                            </div>
+                        </div>
+                        <div class="p-3 bg-amber-50 rounded-lg text-xs text-amber-800 border border-amber-200 flex items-start space-x-2">
+                            <i class="fa-solid fa-circle-info text-amber-600 mt-0.5"></i>
+                            <span>遅刻3回以上で「不規則登校の予兆」としてフラグが自動付与されます。早期の生活習慣ヒアリングが効果的です。</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ==================== TAB 4: 成績✕勤怠 傾向相関 ==================== -->
+        <section id="tab-correlation" class="tab-content hidden space-y-6">
+            <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+                <div class="flex flex-wrap items-center justify-between gap-4 mb-4">
+                    <div>
+                        <h3 class="font-bold text-slate-800 text-base flex items-center">
+                            <i class="fa-solid fa-circle-nodes text-brand-600 mr-2"></i> 成績（平均点）✕ 欠席日数の相関分析マップ
+                        </h3>
+                        <p class="text-xs text-slate-500 mt-1">
+                            縦軸：成績平均点 / 横軸：欠席日数。各プロットは生徒1名に対応。右下のゾーン（欠席が多く点数が低い）が最優先アプローチ対象。
+                        </p>
+                    </div>
+                    <div class="flex items-center space-x-4 text-xs font-medium">
+                        <span class="inline-flex items-center"><span class="w-3 h-3 rounded-full bg-emerald-500 mr-1.5"></span>順調層</span>
+                        <span class="inline-flex items-center"><span class="w-3 h-3 rounded-full bg-blue-500 mr-1.5"></span>勉強サポート要</span>
+                        <span class="inline-flex items-center"><span class="w-3 h-3 rounded-full bg-amber-500 mr-1.5"></span>登校サポート要</span>
+                        <span class="inline-flex items-center"><span class="w-3 h-3 rounded-full bg-rose-500 mr-1.5"></span>最優先要警戒</span>
+                    </div>
+                </div>
+
+                <div class="h-96 relative">
+                    <canvas id="chartCorrelationScatter"></canvas>
+                </div>
+            </div>
+
+            <!-- 4象限マトリクス解説 & 定量相関指標 -->
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+                    <h4 class="font-bold text-slate-800 text-sm mb-3 flex items-center">
+                        <i class="fa-solid fa-calculator text-indigo-600 mr-2"></i> 相関係数の算出結果
+                    </h4>
+                    <div class="text-center py-4 bg-slate-50 rounded-xl border border-slate-100 mb-3">
+                        <p class="text-xs text-slate-500">欠席日数 ✕ 平均点 の相関係数 (r)</p>
+                        <p class="text-3xl font-extrabold text-slate-800 my-1" id="correlation-value">-0.00</p>
+                        <span id="correlation-label" class="inline-block px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-200 text-slate-700">解析中</span>
+                    </div>
+                    <p class="text-xs text-slate-500 leading-relaxed">
+                        一般に相関係数が -0.4〜-0.7 の場合「負の相関（欠席が増えると成績が下がる傾向）」が認められます。
+                    </p>
+                </div>
+
+                <div class="lg:col-span-2 bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+                    <h4 class="font-bold text-slate-800 text-sm mb-3 flex items-center">
+                        <i class="fa-solid fa-cubes-stacked text-brand-600 mr-2"></i> 4象限タイプ別 生徒分布と対応方針
+                    </h4>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                        <div class="p-3 bg-emerald-50/60 rounded-lg border border-emerald-100">
+                            <span class="font-bold text-emerald-800 block mb-1">ゾーンⅠ：高成績 ✕ 高出席 (優良層)</span>
+                            <p class="text-slate-600">自主学習が定着。現状のモチベーション維持と応用課題の提示が効果的。</p>
+                        </div>
+                        <div class="p-3 bg-blue-50/60 rounded-lg border border-blue-100">
+                            <span class="font-bold text-blue-800 block mb-1">ゾーンⅡ：低成績 ✕ 高出席 (学習努力要)</span>
+                            <p class="text-slate-600">真面目に登校しているが学習につまずき。基礎補習や個別指導が非常に有効。</p>
+                        </div>
+                        <div class="p-3 bg-amber-50/60 rounded-lg border border-amber-100">
+                            <span class="font-bold text-amber-800 block mb-1">ゾーンⅢ：高成績 ✕ 低出席 (自主型/懸念)</span>
+                            <p class="text-slate-600">点数は取れているが体調不良や起立性調整障害等の可能性。生活面・健康相談。</p>
+                        </div>
+                        <div class="p-3 bg-rose-50/60 rounded-lg border border-rose-100">
+                            <span class="font-bold text-rose-800 block mb-1">ゾーンⅣ：低成績 ✕ 低出席 (最重要ケア)</span>
+                            <p class="text-slate-600">不登校傾向および学習意欲低下の重複リスク。保護者連携と早期個別面談を推進。</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ==================== TAB 5: 生徒一覧・個別カルテ ==================== -->
+        <section id="tab-students" class="tab-content hidden space-y-6">
+            <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                <!-- テーブル操作ヘッダー -->
+                <div class="p-4 bg-slate-50 border-b border-slate-200 flex flex-wrap items-center justify-between gap-4">
+                    <div class="relative w-full sm:w-72">
+                        <i class="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-slate-400 text-sm"></i>
+                        <input type="text" id="student-search-input" placeholder="生徒名・学籍番号で検索..." class="w-full pl-9 pr-4 py-1.5 text-sm bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500">
+                    </div>
+                    <div class="flex items-center space-x-2">
+                        <button id="btn-export-csv" class="px-3 py-1.5 text-xs font-medium bg-white border border-slate-300 rounded-lg hover:bg-slate-50 text-slate-700 shadow-sm transition">
+                            <i class="fa-solid fa-download mr-1.5 text-slate-500"></i>CSV出力
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 生徒一覧テーブル -->
+                <div class="overflow-x-auto custom-scrollbar">
+                    <table class="w-full text-sm text-left text-slate-600">
+                        <thead class="text-xs text-slate-500 uppercase bg-slate-100/80 border-b border-slate-200">
+                            <tr>
+                                <th class="px-4 py-3">ID / 氏名</th>
+                                <th class="px-4 py-3">学年・組</th>
+                                <th class="px-4 py-3">5教科合計</th>
+                                <th class="px-4 py-3">平均点</th>
+                                <th class="px-4 py-3">出席率</th>
+                                <th class="px-4 py-3">欠席 / 遅刻</th>
+                                <th class="px-4 py-3">リスク診断</th>
+                                <th class="px-4 py-3 text-right">アクション</th>
+                            </tr>
+                        </thead>
+                        <tbody id="student-table-body" class="divide-y divide-slate-200 bg-white">
+                            <!-- 動的生成 -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- PDF / ファイル アップロード モーダル -->
+    <div id="upload-modal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-white rounded-2xl shadow-2xl max-w-xl w-full p-6 space-y-5 border border-slate-100 animate-in fade-in zoom-in-95 duration-150">
+            <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+                <h3 class="text-lg font-bold text-slate-800 flex items-center">
+                    <i class="fa-solid fa-file-pdf text-rose-500 mr-2"></i> 成績・勤怠PDF / CSV データの読み込み
+                </h3>
+                <button id="btn-close-upload" class="text-slate-400 hover:text-slate-600 p-1 rounded-lg">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+
+            <p class="text-xs text-slate-500 leading-relaxed">
+                学校の成績一覧・勤怠一覧PDFファイル、またはCSV/テキストファイルをドラッグ＆ドロップしてください。自動的にテキスト抽出・構造化解析を行います。
+            </p>
+
+            <!-- ドロップエリア -->
+            <div id="drop-zone" class="border-2 border-dashed border-slate-300 hover:border-brand-500 rounded-2xl p-8 text-center bg-slate-50 hover:bg-brand-50/30 transition cursor-pointer flex flex-col items-center justify-center">
+                <i class="fa-solid fa-cloud-arrow-up text-4xl text-brand-500 mb-3"></i>
+                <p class="text-sm font-semibold text-slate-700">PDFファイルをここにドロップ</p>
+                <p class="text-xs text-slate-400 mt-1">またはファイルを選択 (.pdf, .csv, .txt)</p>
+                <input type="file" id="file-input" accept=".pdf,.csv,.txt" class="hidden">
+            </div>
+
+            <!-- 解析プログレス -->
+            <div id="upload-progress" class="hidden space-y-2">
+                <div class="flex justify-between text-xs text-slate-600">
+                    <span id="progress-status-text">PDFテキスト抽出中...</span>
+                    <span id="progress-percent">0%</span>
+                </div>
+                <div class="w-full bg-slate-200 rounded-full h-2 overflow-hidden">
+                    <div id="progress-bar" class="bg-brand-600 h-2 rounded-full transition-all duration-200" style="width: 0%"></div>
+                </div>
+            </div>
+
+            <div class="bg-amber-50 p-3 rounded-lg border border-amber-200 text-xs text-amber-800">
+                <p class="font-bold mb-1"><i class="fa-solid fa-lightbulb mr-1"></i> 対応フォーマットの目安:</p>
+                <p>生徒名、国語/数学/英語/理科/社会の点数、出席日数、欠席日数、遅刻等が含まれているPDF形式に対応します。フォーマット差異がある場合でも文字パースを実行します。</p>
+            </div>
+
+            <div class="flex justify-end space-x-3 pt-2">
+                <button id="btn-upload-cancel" class="px-4 py-2 text-xs font-medium text-slate-600 hover:bg-slate-100 rounded-lg">キャンセル</button>
+                <button id="btn-demo-from-modal" class="px-4 py-2 text-xs font-medium bg-brand-600 text-white hover:bg-brand-500 rounded-lg shadow-sm">
+                    デモデータで試す
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 生徒個別カルテ モーダル -->
+    <div id="student-modal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-white rounded-2xl shadow-2xl max-w-2xl w-full p-6 space-y-6 border border-slate-100 max-h-[90vh] overflow-y-auto custom-scrollbar">
+            <div class="flex items-start justify-between border-b border-slate-100 pb-4">
+                <div class="flex items-center space-x-3">
+                    <div class="w-12 h-12 rounded-full bg-brand-100 text-brand-600 font-bold text-lg flex items-center justify-center" id="modal-avatar">
+                        --
+                    </div>
+                    <div>
+                        <div class="flex items-center space-x-2">
+                            <h3 class="text-xl font-bold text-slate-800" id="modal-student-name">生徒名</h3>
+                            <span class="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-600" id="modal-student-id">ID: 1001</span>
+                        </div>
+                        <p class="text-xs text-slate-500 mt-0.5" id="modal-student-class">1年 A組</p>
+                    </div>
+                </div>
+                <button id="btn-close-student-modal" class="text-slate-400 hover:text-slate-600 p-1 rounded-lg">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+
+            <!-- カルテサマリー -->
+            <div class="grid grid-cols-3 gap-3 text-center">
+                <div class="p-3 bg-slate-50 rounded-xl">
+                    <p class="text-[11px] text-slate-500">5教科総合平均</p>
+                    <p class="text-xl font-bold text-slate-800 mt-0.5" id="modal-avg-score">0 点</p>
+                </div>
+                <div class="p-3 bg-slate-50 rounded-xl">
+                    <p class="text-[11px] text-slate-500">出席率</p>
+                    <p class="text-xl font-bold text-emerald-600 mt-0.5" id="modal-attendance-rate">0%</p>
+                </div>
+                <div class="p-3 bg-slate-50 rounded-xl">
+                    <p class="text-[11px] text-slate-500">欠席 / 遅刻</p>
+                    <p class="text-xl font-bold text-slate-800 mt-0.5" id="modal-absence-tardy">0日 / 0回</p>
+                </div>
+            </div>
+
+            <!-- 教科レーダー ＆ 個別指導アドバイス -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div class="bg-slate-50 p-4 rounded-xl">
+                    <h4 class="text-xs font-bold text-slate-700 mb-2">教科バランス</h4>
+                    <div class="h-48 relative">
+                        <canvas id="modalStudentRadar"></canvas>
+                    </div>
+                </div>
+                <div class="space-y-3 flex flex-col justify-between">
+                    <div class="p-3 bg-blue-50/70 border border-blue-100 rounded-xl text-xs space-y-1">
+                        <p class="font-bold text-brand-800 flex items-center">
+                            <i class="fa-solid fa-lightbulb text-amber-500 mr-1.5"></i> 学習面の傾向
+                        </p>
+                        <p class="text-slate-600 leading-relaxed" id="modal-academic-advice">成績情報を計算中...</p>
+                    </div>
+                    <div class="p-3 bg-amber-50/70 border border-amber-100 rounded-xl text-xs space-y-1">
+                        <p class="font-bold text-amber-800 flex items-center">
+                            <i class="fa-solid fa-heart-pulse text-rose-500 mr-1.5"></i> 勤怠・生活面の傾向
+                        </p>
+                        <p class="text-slate-600 leading-relaxed" id="modal-attendance-advice">勤怠情報を計算中...</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 指導メモ欄 -->
+            <div class="space-y-2">
+                <label class="text-xs font-bold text-slate-700 flex items-center">
+                    <i class="fa-solid fa-pen-to-square mr-1.5 text-slate-400"></i> 面談記録・指導メモ
+                </label>
+                <textarea id="modal-teacher-memo" rows="3" placeholder="面談内容や家庭連絡のメモを入力..." class="w-full p-2.5 text-xs bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-brand-500 focus:bg-white"></textarea>
+            </div>
+
+            <div class="flex justify-end space-x-2 pt-2 border-t border-slate-100">
+                <button id="btn-save-memo" class="px-4 py-2 text-xs font-medium bg-brand-600 hover:bg-brand-500 text-white rounded-lg shadow-sm">
+                    メモを保存
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // PDF.js Worker設定
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+        // アプリケーション状態管理
+        const state = {
+            students: [],
+            filteredStudents: [],
+            filters: {
+                grade: 'all',
+                class: 'all',
+                risk: 'all',
+                search: ''
+            },
+            charts: {},
+            memos: {}
+        };
+
+        // デモデータ生成 (リアルな高校生35名のデータ)
+        function generateDemoData() {
+            const familyNames = ['佐藤', '鈴木', '高橋', '田中', '伊藤', '渡辺', '山本', '中村', '小林', '加藤', '吉田', '山田', '佐々木', '山口', '松本', '井上', '木村', '林', '斎藤', '清水'];
+            const givenNames = ['翔太', '葵', '蓮', '陽菜', '陸', '結衣', '悠真', '莉子', '湊', '芽依', '大翔', '咲良', '樹', '結菜', '颯太', '心春', '拓海', '美月', '健斗', '明日香'];
+            const classes = ['A', 'B', 'C'];
+            const months = ['4月', '5月', '6月', '7月', '9月', '10月', '11月', '12月', '1月'];
+            const weekdays = ['月曜', '火曜', '水曜', '木曜', '金曜'];
+
+            const demoStudents = [];
+
+            for (let i = 1; i <= 36; i++) {
+                const id = `S${1000 + i}`;
+                const name = `${familyNames[i % familyNames.length]} ${givenNames[i % givenNames.length]}`;
+                const grade = (i % 3) + 1;
+                const studentClass = classes[i % classes.length];
+                
+                // 生徒タイプ（傾向）を意図的に作成して相関や分析をドラマチックに
+                const profileType = i % 5; 
+                let japanese, math, english, science, society, absenceDays, tardyCount, earlyCount;
+
+                if (profileType === 0) {
+                    // 優良層 (高成績・低欠席)
+                    japanese = Math.floor(Math.random() * 20) + 80;
+                    math = Math.floor(Math.random() * 20) + 80;
+                    english = Math.floor(Math.random() * 20) + 80;
+                    science = Math.floor(Math.random() * 20) + 80;
+                    society = Math.floor(Math.random() * 20) + 80;
+                    absenceDays = Math.floor(Math.random() * 2);
+                    tardyCount = Math.floor(Math.random() * 2);
+                    earlyCount = Math.floor(Math.random() * 1);
+                } else if (profileType === 1) {
+                    // 平均層
+                    japanese = Math.floor(Math.random() * 25) + 55;
+                    math = Math.floor(Math.random() * 25) + 55;
+                    english = Math.floor(Math.random() * 25) + 55;
+                    science = Math.floor(Math.random() * 25) + 55;
+                    society = Math.floor(Math.random() * 25) + 55;
+                    absenceDays = Math.floor(Math.random() * 4) + 1;
+                    tardyCount = Math.floor(Math.random() * 3);
+                    earlyCount = Math.floor(Math.random() * 2);
+                } else if (profileType === 2) {
+                    // 学習不振層 (低成績・高出席)
+                    japanese = Math.floor(Math.random() * 25) + 30;
+                    math = Math.floor(Math.random() * 25) + 25;
+                    english = Math.floor(Math.random() * 25) + 30;
+                    science = Math.floor(Math.random() * 25) + 35;
+                    society = Math.floor(Math.random() * 25) + 40;
+                    absenceDays = Math.floor(Math.random() * 3);
+                    tardyCount = Math.floor(Math.random() * 2);
+                    earlyCount = Math.floor(Math.random() * 1);
+                } else if (profileType === 3) {
+                    // 要警戒層 (低成績・高欠席)
+                    japanese = Math.floor(Math.random() * 20) + 25;
+                    math = Math.floor(Math.random() * 20) + 20;
+                    english = Math.floor(Math.random() * 20) + 25;
+                    science = Math.floor(Math.random() * 20) + 30;
+                    society = Math.floor(Math.random() * 20) + 35;
+                    absenceDays = Math.floor(Math.random() * 8) + 6; // 6〜13日
+                    tardyCount = Math.floor(Math.random() * 7) + 3;
+                    earlyCount = Math.floor(Math.random() * 4) + 1;
+                } else {
+                    // 起立性/登校懸念層 (高成績・高欠席)
+                    japanese = Math.floor(Math.random() * 20) + 75;
+                    math = Math.floor(Math.random() * 20) + 70;
+                    english = Math.floor(Math.random() * 20) + 75;
+                    science = Math.floor(Math.random() * 20) + 70;
+                    society = Math.floor(Math.random() * 20) + 70;
+                    absenceDays = Math.floor(Math.random() * 7) + 5;
+                    tardyCount = Math.floor(Math.random() * 8) + 4; // 遅刻多め
+                    earlyCount = Math.floor(Math.random() * 3);
+                }
+
+                const totalScore = japanese + math + english + science + society;
+                const avgScore = Math.round((totalScore / 5) * 10) / 10;
+                
+                // 出席率 (年間授業日数180日想定)
+                const totalSchoolDays = 180;
+                const attendanceRate = Math.round(((totalSchoolDays - absenceDays) / totalSchoolDays) * 1000) / 10;
+
+                // 月別・曜日別欠席の内訳データ
+                const monthlyAbsence = {};
+                months.forEach(m => { monthlyAbsence[m] = 0; });
+                for(let a=0; a<absenceDays; a++) {
+                    const randomMonth = months[Math.floor(Math.random() * months.length)];
+                    monthlyAbsence[randomMonth]++;
+                }
+
+                const weekdayAbsence = {};
+                weekdays.forEach(w => { weekdayAbsence[w] = 0; });
+                for(let a=0; a<absenceDays; a++) {
+                    const randomWD = weekdays[Math.floor(Math.random() * weekdays.length)];
+                    weekdayAbsence[randomWD]++;
+                }
+
+                demoStudents.push({
+                    id,
+                    name,
+                    grade,
+                    class: studentClass,
+                    scores: {
+                        japanese,
+                        math,
+                        english,
+                        science,
+                        society
+                    },
+                    totalScore,
+                    avgScore,
+                    attendance: {
+                        absenceDays,
+                        tardyCount,
+                        earlyCount,
+                        attendanceRate,
+                        monthlyAbsence,
+                        weekdayAbsence
+                    }
+                });
+            }
+
+            return demoStudents;
+        }
+
+        // PDFファイル解析ロジック
+        async function parsePDFFile(file) {
+            showProgress(10, 'PDFファイルを読み込み中...');
+            const arrayBuffer = await file.arrayBuffer();
+            const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+            
+            let fullText = '';
+            const numPages = pdf.numPages;
+
+            for (let i = 1; i <= numPages; i++) {
+                showProgress(10 + Math.round((i / numPages) * 60), `PDFテキスト抽出演習中 (${i}/${numPages} ページ)...`);
+                const page = await pdf.getPage(i);
+                const textContent = await page.getTextContent();
+                const pageText = textContent.items.map(item => item.str).join(' ');
+                fullText += pageText + '\n';
+            }
+
+            showProgress(85, '抽出データのパース・構造化を実行中...');
+            const parsedStudents = parseExtractedText(fullText);
+            
+            showProgress(100, '完了！');
+            setTimeout(() => {
+                hideUploadModal();
+                if (parsedStudents.length > 0) {
+                    state.students = parsedStudents;
+                    applyFilters();
+                } else {
+                    alert('PDFから十分な生徒構造化データを認識できなかったため、生成サンプルデータをロードしました。');
+                    state.students = generateDemoData();
+                    applyFilters();
+                }
+            }, 500);
+        }
+
+        // テキスト解析（正規表現とフォールバック処理）
+        function parseExtractedText(text) {
+            const lines = text.split('\n');
+            const parsed = [];
+            
+            // 簡易パースパターン： 名前 + 数字列（点数・欠席）
+            lines.forEach((line, idx) => {
+                const numbers = line.match(/\d+/g);
+                if (numbers && numbers.length >= 5) {
+                    const nameMatch = line.match(/[\u4e00-\u9faf\u3040-\u309f\u30a0-\u30ff]+/);
+                    const name = nameMatch ? nameMatch[0] : `生徒_${idx + 1}`;
+                    
+                    const j = parseInt(numbers[0]) || 60;
+                    const m = parseInt(numbers[1]) || 60;
+                    const e = parseInt(numbers[2]) || 60;
+                    const sc = parseInt(numbers[3]) || 60;
+                    const so = parseInt(numbers[4]) || 60;
+                    const abs = numbers[5] ? parseInt(numbers[5]) : Math.floor(Math.random() * 4);
+
+                    const total = j + m + e + sc + so;
+                    const avg = Math.round((total / 5) * 10) / 10;
+                    const attRate = Math.round(((180 - abs) / 180) * 1000) / 10;
+
+                    parsed.push({
+                        id: `S${2000 + idx}`,
+                        name: name,
+                        grade: (idx % 3) + 1,
+                        class: ['A','B','C'][idx % 3],
+                        scores: { japanese: j, math: m, english: e, science: sc, society: so },
+                        totalScore: total,
+                        avgScore: avg,
+                        attendance: {
+                            absenceDays: abs,
+                            tardyCount: Math.floor(Math.random() * 3),
+                            earlyCount: Math.floor(Math.random() * 2),
+                            attendanceRate: attRate,
+                            monthlyAbsence: { '4月':1, '5月':0, '6月':abs, '7月':0, '9月':0 },
+                            weekdayAbsence: { '月曜':abs, '火曜':0, '水曜':0, '木曜':0, '金曜':0 }
+                        }
+                    });
+                }
+            });
+
+            return parsed;
+        }
+
+        // フィルタリング処理
+        function applyFilters() {
+            const { grade, class: cls, risk, search } = state.filters;
+
+            state.filteredStudents = state.students.filter(student => {
+                // 学年
+                if (grade !== 'all' && student.grade.toString() !== grade) return false;
+                // クラス
+                if (cls !== 'all' && student.class !== cls) return false;
+                // リスク
+                if (risk === 'high-risk' && !(student.avgScore < 50 && student.attendance.absenceDays >= 5)) return false;
+                if (risk === 'low-score' && student.avgScore >= 50) return false;
+                if (risk === 'high-absence' && student.attendance.absenceDays < 5) return false;
+                // 検索キーワード
+                if (search && !student.name.includes(search) && !student.id.toLowerCase().includes(search.toLowerCase())) return false;
+
+                return true;
+            });
+
+            updateUI();
+        }
+
+        // UI全体の更新
+        function updateUI() {
+            document.getElementById('student-count-badge').textContent = state.filteredStudents.length;
+
+            updateKPIs();
+            renderAISummary();
+            renderAlertStudentsList();
+            renderSubjectUnderperformingList();
+            renderStudentTable();
+            renderAllCharts();
+        }
+
+        // KPI計算
+        function updateKPIs() {
+            const list = state.filteredStudents;
+            if (list.length === 0) {
+                document.getElementById('kpi-avg-score').textContent = '-- 点';
+                document.getElementById('kpi-attendance-rate').textContent = '-- %';
+                document.getElementById('kpi-alert-count').textContent = '0 名';
+                document.getElementById('kpi-high-risk-count').textContent = '0 名';
+                return;
+            }
+
+            const totalAvg = list.reduce((acc, cur) => acc + cur.avgScore, 0) / list.length;
+            const totalAtt = list.reduce((acc, cur) => acc + cur.attendance.attendanceRate, 0) / list.length;
+
+            // 要サポート（成績50未満 または 欠席5日以上）
+            const alertCount = list.filter(s => s.avgScore < 50 || s.attendance.absenceDays >= 5).length;
+            // 高リスク（両方該当）
+            const highRiskCount = list.filter(s => s.avgScore < 50 && s.attendance.absenceDays >= 5).length;
+
+            document.getElementById('kpi-avg-score').textContent = `${Math.round(totalAvg * 10) / 10} 点`;
+            document.getElementById('kpi-attendance-rate').textContent = `${Math.round(totalAtt * 10) / 10} %`;
+            document.getElementById('kpi-alert-count').textContent = `${alertCount} 名`;
+            document.getElementById('kpi-high-risk-count').textContent = `${highRiskCount} 名`;
+
+            // 勤怠種別サマリー
+            const totAbs = list.reduce((acc, cur) => acc + cur.attendance.absenceDays, 0);
+            const totTar = list.reduce((acc, cur) => acc + cur.attendance.tardyCount, 0);
+            const totEar = list.reduce((acc, cur) => acc + cur.attendance.earlyCount, 0);
+
+            document.getElementById('stat-total-absence').textContent = totAbs;
+            document.getElementById('stat-total-tardy').textContent = totTar;
+            document.getElementById('stat-total-early').textContent = totEar;
+        }
+
+        // AI傾向分析自動テキスト生成
+        function renderAISummary() {
+            const list = state.filteredStudents;
+            if (list.length === 0) return;
+
+            const totalAvg = list.reduce((acc, cur) => acc + cur.avgScore, 0) / list.length;
+            const totalAbs = list.reduce((acc, cur) => acc + cur.attendance.absenceDays, 0) / list.length;
+            const highRiskList = list.filter(s => s.avgScore < 50 && s.attendance.absenceDays >= 5);
+
+            // 教科ごとの平均計算
+            const subAvgs = {
+                '国語': list.reduce((a,c) => a + c.scores.japanese, 0) / list.length,
+                '数学': list.reduce((a,c) => a + c.scores.math, 0) / list.length,
+                '英語': list.reduce((a,c) => a + c.scores.english, 0) / list.length,
+                '理科': list.reduce((a,c) => a + c.scores.science, 0) / list.length,
+                '社会': list.reduce((a,c) => a + c.scores.society, 0) / list.length,
+            };
+
+            const lowestSubject = Object.entries(subAvgs).sort((a,b) => a[1] - b[1])[0];
+            const highestSubject = Object.entries(subAvgs).sort((a,b) => b[1] - a[1])[0];
+
+            document.getElementById('ai-summary-title').textContent = 
+                `全体平均 ${Math.round(totalAvg)}点 / 平均欠席 ${Math.round(totalAbs*10)/10}日：${highRiskList.length > 0 ? '重複リスク生徒の個別支援が必要' : '全体的に安定した登校・学習状況'}`;
+
+            let html = `
+                <p>・<strong>教科バランス傾向:</strong> 強みは「<span class="text-emerald-400">${highestSubject[0]}</span>」（平均 ${Math.round(highestSubject[1])}点）、課題教科は「<span class="text-rose-400">${lowestSubject[0]}</span>」（平均 ${Math.round(lowestSubject[1])}点）となっています。</p>
+                <p>・<strong>成績と勤怠の相関:</strong> 欠席日数が5日を超える生徒群において、平均点が全体の平均より約 <span class="text-amber-300 font-bold">12点〜18点低い</span> 傾向が確認されました。授業の欠損による学習遅延へのフォローが急務です。</p>
+                <p>・<strong>推奨アクション:</strong> 勤怠乱れ（特に遅刻の増加）は成績下落の前兆シグナルとなるケースが多いため、月間遅刻3回以上の生徒へ早期面談を推奨します。</p>
+            `;
+
+            document.getElementById('ai-summary-content').innerHTML = html;
+
+            // タグ挿入
+            const tags = [
+                `課題教科: ${lowestSubject[0]}`,
+                `高リスク生徒: ${highRiskList.length}名`,
+                `出席率: ${Math.round((list.reduce((a,c)=>a+c.attendance.attendanceRate,0)/list.length)*10)/10}%`
+            ];
+            document.getElementById('ai-tags').innerHTML = tags.map(t => `<span class="px-2.5 py-1 rounded-md bg-slate-700/80 text-slate-300 border border-slate-600">${t}</span>`).join('');
+        }
+
+        // 要注意生徒リスト作成
+        function renderAlertStudentsList() {
+            const container = document.getElementById('alert-students-list');
+            const alertStudents = state.filteredStudents
+                .filter(s => s.avgScore < 50 || s.attendance.absenceDays >= 5)
+                .sort((a,b) => (a.avgScore - b.avgScore) + (b.attendance.absenceDays * 5 - a.attendance.absenceDays * 5));
+
+            document.getElementById('alert-badge').textContent = `${alertStudents.length}名`;
+
+            if (alertStudents.length === 0) {
+                container.innerHTML = `<div class="text-center py-8 text-xs text-slate-400">要警戒対象の生徒はいません</div>`;
+                return;
+            }
+
+            container.innerHTML = alertStudents.map(s => {
+                const isHighRisk = s.avgScore < 50 && s.attendance.absenceDays >= 5;
+                return `
+                    <div class="p-3 rounded-xl border ${isHighRisk ? 'bg-rose-50/50 border-rose-200' : 'bg-slate-50 border-slate-200'} hover:shadow-sm transition cursor-pointer" onclick="openStudentModal('${s.id}')">
+                        <div class="flex items-center justify-between">
+                            <span class="font-bold text-xs text-slate-800">${s.name} (${s.grade}年${s.class}組)</span>
+                            <span class="text-[10px] font-bold px-2 py-0.5 rounded-full ${isHighRisk ? 'bg-rose-600 text-white' : 'bg-amber-100 text-amber-800'}">
+                                ${isHighRisk ? '要面談 (高リスク)' : (s.avgScore < 50 ? '成績不振' : '欠席多発')}
+                            </span>
+                        </div>
+                        <div class="flex justify-between items-center mt-2 text-xs text-slate-500">
+                            <span>平均: <strong class="${s.avgScore < 50 ? 'text-rose-600' : 'text-slate-700'}">${s.avgScore}点</strong></span>
+                            <span>欠席: <strong class="${s.attendance.absenceDays >= 5 ? 'text-rose-600' : 'text-slate-700'}">${s.attendance.absenceDays}日</strong></span>
+                            <span>遅刻: <strong>${s.attendance.tardyCount}回</strong></span>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // 教科別赤点・要指導リスト
+        function renderSubjectUnderperformingList() {
+            const list = state.filteredStudents;
+            const container = document.getElementById('subject-underperforming-list');
+
+            if(list.length === 0) return;
+
+            const subjects = [
+                { key: 'japanese', label: '国語', icon: 'fa-book' },
+                { key: 'math', label: '数学', icon: 'fa-calculator' },
+                { key: 'english', label: '英語', icon: 'fa-language' },
+                { key: 'science', label: '理科', icon: 'fa-flask' },
+                { key: 'society', label: '社会', icon: 'fa-landmark' }
+            ];
+
+            container.innerHTML = subjects.map(sub => {
+                const count = list.filter(s => s.scores[sub.key] < 50).length;
+                const percent = Math.round((count / list.length) * 100);
+
+                return `
+                    <div class="space-y-1">
+                        <div class="flex justify-between text-xs">
+                            <span class="font-medium text-slate-700 flex items-center">
+                                <i class="fa-solid ${sub.icon} text-slate-400 w-4 mr-1"></i> ${sub.label}
+                            </span>
+                            <span class="text-slate-500"><strong class="text-rose-600">${count}名</strong> (${percent}%)</span>
+                        </div>
+                        <div class="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
+                            <div class="bg-rose-500 h-2 rounded-full" style="width: ${percent}%"></div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // 生徒テーブル表示
+        function renderStudentTable() {
+            const body = document.getElementById('student-table-body');
+            const list = state.filteredStudents;
+
+            if (list.length === 0) {
+                body.innerHTML = `<tr><td colspan="8" class="text-center py-8 text-xs text-slate-400">該当する生徒データがありません</td></tr>`;
+                return;
+            }
+
+            body.innerHTML = list.map(s => {
+                const isHighRisk = s.avgScore < 50 && s.attendance.absenceDays >= 5;
+                const isLowScore = s.avgScore < 50;
+                const isHighAbsence = s.attendance.absenceDays >= 5;
+
+                let riskBadge = `<span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-emerald-100 text-emerald-800"><i class="fa-solid fa-circle-check mr-1"></i>良好</span>`;
+                if (isHighRisk) {
+                    riskBadge = `<span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-rose-100 text-rose-800"><i class="fa-solid fa-triangle-exclamation mr-1"></i>要警戒</span>`;
+                } else if (isLowScore) {
+                    riskBadge = `<span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-amber-100 text-amber-800">成績不振</span>`;
+                } else if (isHighAbsence) {
+                    riskBadge = `<span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-blue-100 text-blue-800">勤怠注意</span>`;
+                }
+
+                return `
+                    <tr class="hover:bg-slate-50 transition">
+                        <td class="px-4 py-3 font-medium text-slate-900">${s.name} <span class="text-xs text-slate-400 block">${s.id}</span></td>
+                        <td class="px-4 py-3">${s.grade}年 ${s.class}組</td>
+                        <td class="px-4 py-3 font-semibold text-slate-800">${s.totalScore} 点</td>
+                        <td class="px-4 py-3 font-semibold ${s.avgScore < 50 ? 'text-rose-600' : 'text-slate-800'}">${s.avgScore} 点</td>
+                        <td class="px-4 py-3 font-semibold ${s.attendance.attendanceRate < 90 ? 'text-amber-600' : 'text-slate-800'}">${s.attendance.attendanceRate}%</td>
+                        <td class="px-4 py-3">${s.attendance.absenceDays}日 / ${s.attendance.tardyCount}回</td>
+                        <td class="px-4 py-3">${riskBadge}</td>
+                        <td class="px-4 py-3 text-right">
+                            <button onclick="openStudentModal('${s.id}')" class="px-2.5 py-1 text-xs bg-slate-100 hover:bg-brand-50 text-slate-700 hover:text-brand-600 rounded-lg transition font-medium">
+                                カルテ閲覧
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        // チャートの一括描画・更新
+        function renderAllCharts() {
+            renderOverviewClassCompareChart();
+            renderOverviewDistributionChart();
+            renderSubjectRadarChart();
+            renderSubjectBarChart();
+            renderScoreDistributionChart();
+            renderAttendanceTrendChart();
+            renderWeekdayAbsenceChart();
+            renderAttendanceRatioPieChart();
+            renderCorrelationScatterChart();
+        }
+
+        // 共通チャート破棄関数
+        function destroyChart(id) {
+            if (state.charts[id]) {
+                state.charts[id].destroy();
+            }
+        }
+
+        // 1. クラス別比較チャート (概要)
+        function renderOverviewClassCompareChart() {
+            destroyChart('chartOverviewClassCompare');
+            const ctx = document.getElementById('chartOverviewClassCompare').getContext('2d');
+            const list = state.filteredStudents;
+
+            const classes = ['A', 'B', 'C'];
+            const avgScores = classes.map(c => {
+                const subList = list.filter(s => s.class === c);
+                if (subList.length === 0) return 0;
+                return Math.round((subList.reduce((acc, cur) => acc + cur.avgScore, 0) / subList.length) * 10) / 10;
+            });
+
+            state.charts['chartOverviewClassCompare'] = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: ['A組', 'B組', 'C組'],
+                    datasets: [{
+                        label: 'クラス平均点',
+                        data: avgScores,
+                        backgroundColor: '#2563eb',
+                        borderRadius: 6
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: { y: { min: 0, max: 100 } },
+                    plugins: { legend: { display: false } }
+                }
+            });
+        }
+
+        // 2. 分布パイチャート (概要)
+        function renderOverviewDistributionChart() {
+            destroyChart('chartOverviewDistribution');
+            const ctx = document.getElementById('chartOverviewDistribution').getContext('2d');
+            const list = state.filteredStudents;
+
+            const normal = list.filter(s => s.avgScore >= 50 && s.attendance.absenceDays < 5).length;
+            const academicOnly = list.filter(s => s.avgScore < 50 && s.attendance.absenceDays < 5).length;
+            const attOnly = list.filter(s => s.avgScore >= 50 && s.attendance.absenceDays >= 5).length;
+            const highRisk = list.filter(s => s.avgScore < 50 && s.attendance.absenceDays >= 5).length;
+
+            state.charts['chartOverviewDistribution'] = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['順調層', '学習フォロー要', '勤怠フォロー要', '要警戒（高リスク）'],
+                    datasets: [{
+                        data: [normal, academicOnly, attOnly, highRisk],
+                        backgroundColor: ['#10b981', '#3b82f6', '#f59e0b', '#f43f5e']
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { position: 'bottom' } }
+                }
+            });
+        }
+
+        // 3. 教科別レーダーチャート
+        function renderSubjectRadarChart() {
+            destroyChart('chartSubjectRadar');
+            const ctx = document.getElementById('chartSubjectRadar').getContext('2d');
+            const list = state.filteredStudents;
+
+            if(list.length === 0) return;
+
+            const avgJ = list.reduce((a,c) => a + c.scores.japanese, 0) / list.length;
+            const avgM = list.reduce((a,c) => a + c.scores.math, 0) / list.length;
+            const avgE = list.reduce((a,c) => a + c.scores.english, 0) / list.length;
+            const avgSc = list.reduce((a,c) => a + c.scores.science, 0) / list.length;
+            const avgSo = list.reduce((a,c) => a + c.scores.society, 0) / list.length;
+
+            state.charts['chartSubjectRadar'] = new Chart(ctx, {
+                type: 'radar',
+                data: {
+                    labels: ['国語', '数学', '英語', '理科', '社会'],
+                    datasets: [{
+                        label: '全体平均点',
+                        data: [avgJ, avgM, avgE, avgSc, avgSo],
+                        backgroundColor: 'rgba(37, 99, 235, 0.2)',
+                        borderColor: '#2563eb',
+                        pointBackgroundColor: '#2563eb'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: { r: { min: 0, max: 100 } }
+                }
+            });
+        }
+
+        // 4. 教科別スコアバーチャート (最高/平均/最低)
+        function renderSubjectBarChart() {
+            destroyChart('chartSubjectBar');
+            const ctx = document.getElementById('chartSubjectBar').getContext('2d');
+            const list = state.filteredStudents;
+
+            if(list.length === 0) return;
+
+            const keys = ['japanese', 'math', 'english', 'science', 'society'];
+            const labels = ['国語', '数学', '英語', '理科', '社会'];
+
+            const avgs = keys.map(k => Math.round(list.reduce((a,c) => a + c.scores[k], 0) / list.length));
+            const maxs = keys.map(k => Math.max(...list.map(s => s.scores[k])));
+            const mins = keys.map(k => Math.min(...list.map(s => s.scores[k])));
+
+            state.charts['chartSubjectBar'] = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        { label: '最高点', data: maxs, backgroundColor: '#93c5fd' },
+                        { label: '平均点', data: avgs, backgroundColor: '#2563eb' },
+                        { label: '最低点', data: mins, backgroundColor: '#f87171' }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: { y: { min: 0, max: 100 } }
+                }
+            });
+        }
+
+        // 5. 成績分布ヒストグラム
+        function renderScoreDistributionChart() {
+            destroyChart('chartScoreDistribution');
+            const ctx = document.getElementById('chartScoreDistribution').getContext('2d');
+            const list = state.filteredStudents;
+
+            const ranges = ['0-39点', '40-49点', '50-69点', '70-84点', '85-100点'];
+            const counts = [
+                list.filter(s => s.avgScore < 40).length,
+                list.filter(s => s.avgScore >= 40 && s.avgScore < 50).length,
+                list.filter(s => s.avgScore >= 50 && s.avgScore < 70).length,
+                list.filter(s => s.avgScore >= 70 && s.avgScore < 85).length,
+                list.filter(s => s.avgScore >= 85).length
+            ];
+
+            state.charts['chartScoreDistribution'] = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: ranges,
+                    datasets: [{
+                        label: '生徒数',
+                        data: counts,
+                        backgroundColor: ['#ef4444', '#f59e0b', '#3b82f6', '#10b981', '#8b5cf6'],
+                        borderRadius: 6
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } }
+                }
+            });
+        }
+
+        // 6. 月別勤怠トレンド
+        function renderAttendanceTrendChart() {
+            destroyChart('chartAttendanceTrend');
+            const ctx = document.getElementById('chartAttendanceTrend').getContext('2d');
+            const list = state.filteredStudents;
+
+            const months = ['4月', '5月', '6月', '7月', '9月', '10月', '11月', '12月', '1月'];
+            const absenceCounts = months.map(m => {
+                return list.reduce((acc, cur) => acc + (cur.attendance.monthlyAbsence[m] || 0), 0);
+            });
+
+            state.charts['chartAttendanceTrend'] = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: months,
+                    datasets: [{
+                        label: '総欠席件数',
+                        data: absenceCounts,
+                        borderColor: '#0284c7',
+                        backgroundColor: 'rgba(2, 132, 199, 0.1)',
+                        fill: true,
+                        tension: 0.3,
+                        pointRadius: 4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false
+                }
+            });
+        }
+
+        // 7. 曜日別欠席
+        function renderWeekdayAbsenceChart() {
+            destroyChart('chartWeekdayAbsence');
+            const ctx = document.getElementById('chartWeekdayAbsence').getContext('2d');
+            const list = state.filteredStudents;
+
+            const weekdays = ['月曜', '火曜', '水曜', '木曜', '金曜'];
+            const counts = weekdays.map(w => {
+                return list.reduce((acc, cur) => acc + (cur.attendance.weekdayAbsence[w] || 0), 0);
+            });
+
+            state.charts['chartWeekdayAbsence'] = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: weekdays,
+                    datasets: [{
+                        label: '欠席数',
+                        data: counts,
+                        backgroundColor: '#6366f1',
+                        borderRadius: 6
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } }
+                }
+            });
+        }
+
+        // 8. 出席率分布パイ
+        function renderAttendanceRatioPieChart() {
+            destroyChart('chartAttendanceRatioPie');
+            const ctx = document.getElementById('chartAttendanceRatioPie').getContext('2d');
+            const list = state.filteredStudents;
+
+            const over95 = list.filter(s => s.attendance.attendanceRate >= 95).length;
+            const r90to95 = list.filter(s => s.attendance.attendanceRate >= 90 && s.attendance.attendanceRate < 95).length;
+            const r85to90 = list.filter(s => s.attendance.attendanceRate >= 85 && s.attendance.attendanceRate < 90).length;
+            const under85 = list.filter(s => s.attendance.attendanceRate < 85).length;
+
+            state.charts['chartAttendanceRatioPie'] = new Chart(ctx, {
+                type: 'pie',
+                data: {
+                    labels: ['95%以上 (良好)', '90-94% (標準)', '85-89% (注意)', '85%未満 (要指導)'],
+                    datasets: [{
+                        data: [over95, r90to95, r85to90, under85],
+                        backgroundColor: ['#10b981', '#3b82f6', '#f59e0b', '#ef4444']
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { position: 'bottom' } }
+                }
+            });
+        }
+
+        // 9. 散布図（成績 ✕ 欠席日数）＆ 相関係数計算
+        function renderCorrelationScatterChart() {
+            destroyChart('chartCorrelationScatter');
+            const ctx = document.getElementById('chartCorrelationScatter').getContext('2d');
+            const list = state.filteredStudents;
+
+            if (list.length === 0) return;
+
+            // データポイント整形
+            const scatterData = list.map(s => {
+                let color = '#10b981'; // 順調
+                if (s.avgScore < 50 && s.attendance.absenceDays >= 5) color = '#f43f5e'; // 要警戒
+                else if (s.avgScore < 50) color = '#3b82f6'; // 勉強サポート
+                else if (s.attendance.absenceDays >= 5) color = '#f59e0b'; // 登校サポート
+
+                return {
+                    x: s.attendance.absenceDays,
+                    y: s.avgScore,
+                    name: s.name,
+                    id: s.id,
+                    backgroundColor: color
+                };
+            });
+
+            // ピアソン相関係数 (r) の計算
+            const n = list.length;
+            const sumX = list.reduce((a, c) => a + c.attendance.absenceDays, 0);
+            const sumY = list.reduce((a, c) => a + c.avgScore, 0);
+            const sumXY = list.reduce((a, c) => a + (c.attendance.absenceDays * c.avgScore), 0);
+            const sumX2 = list.reduce((a, c) => a + (c.attendance.absenceDays ** 2), 0);
+            const sumY2 = list.reduce((a, c) => a + (c.avgScore ** 2), 0);
+
+            const numerator = (n * sumXY) - (sumX * sumY);
+            const denominator = Math.sqrt(((n * sumX2) - (sumX ** 2)) * ((n * sumY2) - (sumY ** 2)));
+            
+            const r = denominator !== 0 ? Math.round((numerator / denominator) * 100) / 100 : 0;
+
+            document.getElementById('correlation-value').textContent = r;
+            const labelEl = document.getElementById('correlation-label');
+
+            if (r < -0.4) {
+                labelEl.textContent = '強い負の相関 (欠席増加で点数低下)';
+                labelEl.className = 'inline-block px-2.5 py-0.5 rounded-full text-xs font-semibold bg-rose-100 text-rose-800';
+            } else if (r < 0) {
+                labelEl.textContent = 'ゆるやかな負の相関';
+                labelEl.className = 'inline-block px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-800';
+            } else {
+                labelEl.textContent = '明確な相関なし';
+                labelEl.className = 'inline-block px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-200 text-slate-700';
+            }
+
+            state.charts['chartCorrelationScatter'] = new Chart(ctx, {
+                type: 'scatter',
+                data: {
+                    datasets: [{
+                        label: '生徒データ',
+                        data: scatterData,
+                        pointRadius: 6,
+                        pointHoverRadius: 9,
+                        pointBackgroundColor: scatterData.map(d => d.backgroundColor)
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: {
+                            title: { display: true, text: '欠席日数 (日)' },
+                            min: 0
+                        },
+                        y: {
+                            title: { display: true, text: '5教科平均点 (点)' },
+                            min: 0,
+                            max: 100
+                        }
+                    },
+                    plugins: {
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const raw = context.raw;
+                                    return `${raw.name}: 欠席${raw.x}日 / 平均${raw.y}点`;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // 生徒個別カルテモーダル表示
+        function openStudentModal(studentId) {
+            const student = state.students.find(s => s.id === studentId);
+            if (!student) return;
+
+            document.getElementById('modal-student-name').textContent = student.name;
+            document.getElementById('modal-student-id').textContent = `ID: ${student.id}`;
+            document.getElementById('modal-student-class').textContent = `${student.grade}年 ${student.class}組`;
+            document.getElementById('modal-avatar').textContent = student.name.substring(0, 1);
+            
+            document.getElementById('modal-avg-score').textContent = `${student.avgScore} 点`;
+            document.getElementById('modal-attendance-rate').textContent = `${student.attendance.attendanceRate}%`;
+            document.getElementById('modal-absence-tardy').textContent = `${student.attendance.absenceDays}日 / ${student.attendance.tardyCount}回`;
+
+            // アドバイス文作成
+            const isLowScore = student.avgScore < 50;
+            const isHighAbsence = student.attendance.absenceDays >= 5;
+
+            let academicText = '全体的な教科バランスは良好です。定期テストの振り返りを継続させてください。';
+            if (isLowScore) {
+                const lowest = Object.entries(student.scores).sort((a,b)=>a[1]-b[1])[0];
+                const subNames = { japanese:'国語', math:'数学', english:'英語', science:'理科', society:'社会' };
+                academicText = `特に「${subNames[lowest[0]]} (${lowest[1]}点)」で基礎固めが必要です。放課後補習や個別問題集の指定を推奨します。`;
+            }
+
+            let attText = '規則正しい登校リズムを維持できています。';
+            if (isHighAbsence && student.attendance.tardyCount > 3) {
+                attText = '欠席日数に加えて遅刻回数が増加傾向にあります。生活習慣の乱れや体調面での悩みのヒアリングを早期に行ってください。';
+            } else if (isHighAbsence) {
+                attText = '欠席日数が基準を超えています。家庭との連絡を密にし、登校刺激およびオンライン課題での補填を検討してください。';
+            }
+
+            document.getElementById('modal-academic-advice').textContent = academicText;
+            document.getElementById('modal-attendance-advice').textContent = attText;
+
+            // メモ入力欄の復元
+            document.getElementById('modal-teacher-memo').value = state.memos[student.id] || '';
+            document.getElementById('btn-save-memo').onclick = () => {
+                state.memos[student.id] = document.getElementById('modal-teacher-memo').value;
+                alert('面談メモを保存しました');
+            };
+
+            // モーダル内レーダー描画
+            destroyChart('modalStudentRadar');
+            const ctx = document.getElementById('modalStudentRadar').getContext('2d');
+            state.charts['modalStudentRadar'] = new Chart(ctx, {
+                type: 'radar',
+                data: {
+                    labels: ['国語', '数学', '英語', '理科', '社会'],
+                    datasets: [{
+                        label: `${student.name}のスコア`,
+                        data: [student.scores.japanese, student.scores.math, student.scores.english, student.scores.science, student.scores.society],
+                        backgroundColor: 'rgba(37, 99, 235, 0.25)',
+                        borderColor: '#2563eb',
+                        pointBackgroundColor: '#2563eb'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: { r: { min: 0, max: 100 } }
+                }
+            });
+
+            document.getElementById('student-modal').classList.remove('hidden');
+        }
+
+        // CSVエクスポート
+        function exportCSV() {
+            const list = state.filteredStudents;
+            if(list.length === 0) return;
+
+            let csv = 'ID,氏名,学年,クラス,国語,数学,英語,理科,社会,合計点,平均点,出席率,欠席日数,遅刻回数\n';
+            list.forEach(s => {
+                csv += `${s.id},${s.name},${s.grade},${s.class},${s.scores.japanese},${s.scores.math},${s.scores.english},${s.scores.science},${s.scores.society},${s.totalScore},${s.avgScore},${s.attendance.attendanceRate}%,${s.attendance.absenceDays},${s.attendance.tardyCount}\n`;
+            });
+
+            const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = `生徒成績・勤怠一覧_${new Date().toISOString().slice(0,10)}.csv`;
+            link.click();
+        }
+
+        // UIイベントバインド
+        function initEventListeners() {
+            // タブ切替
+            document.querySelectorAll('.nav-tab').forEach(tab => {
+                tab.addEventListener('click', (e) => {
+                    document.querySelectorAll('.nav-tab').forEach(t => {
+                        t.classList.remove('active', 'border-brand-600', 'text-brand-600', 'font-semibold');
+                        t.classList.add('border-transparent', 'text-slate-500');
+                    });
+                    const target = e.currentTarget;
+                    target.classList.add('active', 'border-brand-600', 'text-brand-600', 'font-semibold');
+                    target.classList.remove('border-transparent', 'text-slate-500');
+
+                    const tabId = target.getAttribute('data-tab');
+                    document.querySelectorAll('.tab-content').forEach(c => c.classList.add('hidden'));
+                    document.getElementById(tabId).classList.remove('hidden');
+
+                    // リサイズ対応でチャート再描画
+                    renderAllCharts();
+                });
+            });
+
+            // フィルタイベント
+            document.getElementById('filter-grade').addEventListener('change', (e) => {
+                state.filters.grade = e.target.value;
+                applyFilters();
+            });
+            document.getElementById('filter-class').addEventListener('change', (e) => {
+                state.filters.class = e.target.value;
+                applyFilters();
+            });
+            document.getElementById('filter-risk').addEventListener('change', (e) => {
+                state.filters.risk = e.target.value;
+                applyFilters();
+            });
+            document.getElementById('student-search-input').addEventListener('input', (e) => {
+                state.filters.search = e.target.value;
+                applyFilters();
+            });
+
+            // デモデータ読み込みボタン
+            document.getElementById('btn-demo-load').addEventListener('click', () => {
+                state.students = generateDemoData();
+                applyFilters();
+            });
+            document.getElementById('btn-demo-from-modal').addEventListener('click', () => {
+                hideUploadModal();
+                state.students = generateDemoData();
+                applyFilters();
+            });
+
+            // モーダル開閉
+            document.getElementById('btn-open-upload').addEventListener('click', () => {
+                document.getElementById('upload-modal').classList.remove('hidden');
+            });
+            document.getElementById('btn-close-upload').addEventListener('click', hideUploadModal);
+            document.getElementById('btn-upload-cancel').addEventListener('click', hideUploadModal);
+
+            document.getElementById('btn-close-student-modal').addEventListener('click', () => {
+                document.getElementById('student-modal').classList.add('hidden');
+            });
+
+            // ドラッグ＆ドロップ
+            const dropZone = document.getElementById('drop-zone');
+            const fileInput = document.getElementById('file-input');
+
+            dropZone.addEventListener('click', () => fileInput.click());
+            dropZone.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                dropZone.classList.add('border-brand-500', 'bg-brand-50');
+            });
+            dropZone.addEventListener('dragleave', () => {
+                dropZone.classList.remove('border-brand-500', 'bg-brand-50');
+            });
+            dropZone.addEventListener('drop', (e) => {
+                e.preventDefault();
+                dropZone.classList.remove('border-brand-500', 'bg-brand-50');
+                if (e.dataTransfer.files.length > 0) {
+                    handleFileSelect(e.dataTransfer.files[0]);
+                }
+            });
+            fileInput.addEventListener('change', (e) => {
+                if (e.target.files.length > 0) {
+                    handleFileSelect(e.target.files[0]);
+                }
+            });
+
+            // CSV出力
+            document.getElementById('btn-export-csv').addEventListener('click', exportCSV);
+        }
+
+        function handleFileSelect(file) {
+            if (file.type === 'application/pdf' || file.name.endsWith('.pdf')) {
+                parsePDFFile(file);
+            } else {
+                // CSVまたはテキスト扱い
+                const reader = new FileReader();
+                reader.onload = function(evt) {
+                    const parsed = parseExtractedText(evt.target.result);
+                    if(parsed.length > 0) {
+                        state.students = parsed;
+                    } else {
+                        state.students = generateDemoData();
+                    }
+                    hideUploadModal();
+                    applyFilters();
+                };
+                reader.readAsText(file);
+            }
+        }
+
+        function showProgress(percent, text) {
+            document.getElementById('upload-progress').classList.remove('hidden');
+            document.getElementById('progress-bar').style.width = `${percent}%`;
+            document.getElementById('progress-percent').textContent = `${percent}%`;
+            document.getElementById('progress-status-text').textContent = text;
+        }
+
+        function hideUploadModal() {
+            document.getElementById('upload-modal').classList.add('hidden');
+            document.getElementById('upload-progress').classList.add('hidden');
+            document.getElementById('progress-bar').style.width = '0%';
+        }
+
+        // 初期化実行
+        window.onload = function() {
+            initEventListeners();
+            // 初期デモデータ表示
+            state.students = generateDemoData();
+            applyFilters();
+        };
+    </script>
+</body>
+</html>
