@@ -836,14 +836,17 @@
                 if (numbers.length >= 2 || (nameMatch && numbers.length >= 1)) {
                     const name = nameMatch ? nameMatch[0].trim() : `生徒_${parsed.length + 1}`;
 
-                    // 100以下の数字をスコア候補として取得
-                    const validScores = numbers.filter(n => n <= 100);
+                    // 学年や出席番号などのノイズ（小さな数値）を除外し、得点として妥当な数値を後ろから5つ取得
+                    let scoreCandidates = numbers.filter(n => n >= 0 && n <= 100);
+                    if (scoreCandidates.length >= 5) {
+                        scoreCandidates = scoreCandidates.slice(-5);
+                    }
                     
-                    let j = validScores[0] !== undefined ? validScores[0] : Math.floor(Math.random() * 30) + 55;
-                    let m = validScores[1] !== undefined ? validScores[1] : Math.floor(Math.random() * 30) + 55;
-                    let e = validScores[2] !== undefined ? validScores[2] : Math.floor(Math.random() * 30) + 55;
-                    let sc = validScores[3] !== undefined ? validScores[3] : Math.floor(Math.random() * 30) + 55;
-                    let so = validScores[4] !== undefined ? validScores[4] : Math.floor(Math.random() * 30) + 55;
+                    let j = scoreCandidates[0] !== undefined ? scoreCandidates[0] : Math.floor(Math.random() * 30) + 55;
+                    let m = scoreCandidates[1] !== undefined ? scoreCandidates[1] : Math.floor(Math.random() * 30) + 55;
+                    let e = scoreCandidates[2] !== undefined ? scoreCandidates[2] : Math.floor(Math.random() * 30) + 55;
+                    let sc = scoreCandidates[3] !== undefined ? scoreCandidates[3] : Math.floor(Math.random() * 30) + 55;
+                    let so = scoreCandidates[4] !== undefined ? scoreCandidates[4] : Math.floor(Math.random() * 30) + 55;
 
                     let abs = 0;
                     let tardy = 0;
@@ -917,11 +920,17 @@
 
         function addParsedStudentFromTokens(parsedArray, name, numbers, months, weekdays) {
             const studentName = name || `生徒_${parsedArray.length + 1}`;
-            const j = numbers[0] !== undefined && numbers[0] <= 100 ? numbers[0] : Math.floor(Math.random() * 30) + 60;
-            const m = numbers[1] !== undefined && numbers[1] <= 100 ? numbers[1] : Math.floor(Math.random() * 30) + 60;
-            const e = numbers[2] !== undefined && numbers[2] <= 100 ? numbers[2] : Math.floor(Math.random() * 30) + 60;
-            const sc = numbers[3] !== undefined && numbers[3] <= 100 ? numbers[3] : Math.floor(Math.random() * 30) + 60;
-            const so = numbers[4] !== undefined && numbers[4] <= 100 ? numbers[4] : Math.floor(Math.random() * 30) + 60;
+            
+            let scoreCandidates = numbers.filter(n => n >= 0 && n <= 100);
+            if (scoreCandidates.length >= 5) {
+                scoreCandidates = scoreCandidates.slice(-5);
+            }
+
+            const j = scoreCandidates[0] !== undefined ? scoreCandidates[0] : Math.floor(Math.random() * 30) + 60;
+            const m = scoreCandidates[1] !== undefined ? scoreCandidates[1] : Math.floor(Math.random() * 30) + 60;
+            const e = scoreCandidates[2] !== undefined ? scoreCandidates[2] : Math.floor(Math.random() * 30) + 60;
+            const sc = scoreCandidates[3] !== undefined ? scoreCandidates[3] : Math.floor(Math.random() * 30) + 60;
+            const so = scoreCandidates[4] !== undefined ? scoreCandidates[4] : Math.floor(Math.random() * 30) + 60;
             const abs = numbers[5] !== undefined && numbers[5] < 50 ? numbers[5] : Math.floor(Math.random() * 3);
 
             const total = j + m + e + sc + so;
