@@ -625,6 +625,18 @@
             memos: {}
         };
 
+        function showNotification(message, type = 'info') {
+            const toast = document.createElement('div');
+            const bgClass = type === 'success' ? 'bg-emerald-600' : 'bg-brand-600';
+            toast.className = `fixed bottom-5 right-5 ${bgClass} text-white px-4 py-3 rounded-xl shadow-xl z-50 flex items-center space-x-2 text-xs font-semibold transition-all duration-300`;
+            toast.innerHTML = `<i class="fa-solid ${type === 'success' ? 'fa-circle-check' : 'fa-info-circle'} text-sm"></i><span>${message}</span>`;
+            document.body.appendChild(toast);
+            setTimeout(() => {
+                toast.classList.add('opacity-0', 'translate-y-2');
+                setTimeout(() => toast.remove(), 300);
+            }, 3500);
+        }
+
         // デモデータ生成 (リアルな高校生35名のデータ)
         function generateDemoData() {
             const familyNames = ['佐藤', '鈴木', '高橋', '田中', '伊藤', '渡辺', '山本', '中村', '小林', '加藤', '吉田', '山田', '佐々木', '山口', '松本', '井上', '木村', '林', '斎藤', '清水'];
@@ -747,84 +759,200 @@
             return demoStudents;
         }
 
-        // PDFファイル解析ロジック
         async function parsePDFFile(file) {
             showProgress(10, 'PDFファイルを読み込み中...');
-            const arrayBuffer = await file.arrayBuffer();
-            const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-            
-            let fullText = '';
-            const numPages = pdf.numPages;
+            try {
+                const arrayBuffer = await file.arrayBuffer();
+                const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+                
+                let fullText = '';
+                const numPages = pdf.numPages;
 
-            for (let i = 1; i <= numPages; i++) {
-                showProgress(10 + Math.round((i / numPages) * 60), `PDFテキスト抽出演習中 (${i}/${numPages} ページ)...`);
-                const page = await pdf.getPage(i);
-                const textContent = await page.getTextContent();
-                const pageText = textContent.items.map(item => item.str).join(' ');
-                fullText += pageText + '\n';
-            }
+                for (let i = 1; i <= numPages; i++) {
+                    showProgress(10 + Math.round((i / numPages) * 60), `PDFテキスト抽出中 (${i}/${numPages} ページ)...`);
+                    const page = await pdf.getPage(i);
+                    const textContent = await page.getTextContent();
+                    
+                    let lastY = null;
+                    let pageText = '';
 
-            showProgress(85, '抽出データのパース・構造化を実行中...');
-            const parsedStudents = parseExtractedText(fullText);
-            
-            showProgress(100, '完了！');
-            setTimeout(() => {
-                hideUploadModal();
-                if (parsedStudents.length > 0) {
-                    state.students = parsedStudents;
-                    applyFilters();
-                } else {
-                    alert('PDFから十分な生徒構造化データを認識できなかったため、生成サンプルデータをロードしました。');
-                    state.students = generateDemoData();
-                    applyFilters();
+                    // Y座標（transform[5]）の変化を監視して適切な改行コードを挿入
+                    for (const item of textContent.items) {
+                        if (!item.str || item.str.trim().length === 0) continue;
+                        const currentY = item.transform ? item.transform[5] : null;
+                        if (lastY !== null && currentY !== null && Math.abs(currentY - lastY) > 5) {
+                            pageText += '\n';
+                        } else if (pageText.length > 0 && !pageText.endsWith('\n')) {
+                            pageText += ' ';
+                        }
+                        pageText += item.str;
+                        if (currentY !== null) lastY = currentY;
+                    }
+                    fullText += pageText + '\n';
                 }
-            }, 500);
+
+                showProgress(85, '抽出データのパース・構造化を実行中...');
+                const parsedStudents = parseExtractedText(fullText);
+                
+                showProgress(100, '完了！');
+                setTimeout(() => {
+                    hideUploadModal();
+                    if (parsedStudents.length > 0) {
+                        state.students = parsedStudents;
+                        applyFilters();
+                        showNotification(`PDFから ${parsedStudents.length} 名の生徒データを読み込みました`, 'success');
+                    } else {
+                        alert('PDFから生徒構造データを認識できなかったため、生成サンプルデータを表示します。');
+                        state.students = generateDemoData();
+                        applyFilters();
+                    }
+                }, 400);
+            } catch (err) {
+                console.error('PDF Parse Error:', err);
+                hideUploadModal();
+                alert('PDFファイルの解析中にエラーが発生しました。ファイルの形式をご確認ください。');
+            }
         }
 
-        // テキスト解析（正規表現とフォールバック処理）
         function parseExtractedText(text) {
-            const lines = text.split('\n');
+            if (!text || typeof text !== 'string') return [];
+
+            const lines = text.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 0);
             const parsed = [];
-            
-            // 簡易パースパターン： 名前 + 数字列（点数・欠席）
+            const months = ['4月', '5月', '6月', '7月', '9月', '10月', '11月', '12月', '1月'];
+            const weekdays = ['月曜', '火曜', '水曜', '木曜', '金曜'];
+
             lines.forEach((line, idx) => {
-                const numbers = line.match(/\d+/g);
-                if (numbers && numbers.length >= 5) {
-                    const nameMatch = line.match(/[\u4e00-\u9faf\u3040-\u309f\u30a0-\u30ff]+/);
-                    const name = nameMatch ? nameMatch[0] : `生徒_${idx + 1}`;
+                // ヘッダー行などのスキップ（「学籍番号」「氏名」「平均」等の文字のみで数値がない行を除外）
+                if ((line.includes('氏名') || line.includes('名前')) && !line.match(/\d{2,}/)) return;
+
+                // 数字の抽出
+                const numbers = (line.match(/\d+/g) || []).map(Number);
+                
+                // 名前マッチ（日本語名：漢字・ひらがな・カタカナ）
+                const nameMatch = line.match(/[\u4e00-\u9faf\u3040-\u309f\u30a0-\u30ff]{2,}(?:\s+[\u4e00-\u9faf\u3040-\u309f\u30a0-\u30ff]{1,})?/);
+                
+                // 生徒データとして成立する条件（数値が複数または名前がある）
+                if (numbers.length >= 2 || (nameMatch && numbers.length >= 1)) {
+                    const name = nameMatch ? nameMatch[0].trim() : `生徒_${parsed.length + 1}`;
+
+                    // 100以下の数字をスコア候補として取得
+                    const validScores = numbers.filter(n => n <= 100);
                     
-                    const j = parseInt(numbers[0]) || 60;
-                    const m = parseInt(numbers[1]) || 60;
-                    const e = parseInt(numbers[2]) || 60;
-                    const sc = parseInt(numbers[3]) || 60;
-                    const so = parseInt(numbers[4]) || 60;
-                    const abs = numbers[5] ? parseInt(numbers[5]) : Math.floor(Math.random() * 4);
+                    let j = validScores[0] !== undefined ? validScores[0] : Math.floor(Math.random() * 30) + 55;
+                    let m = validScores[1] !== undefined ? validScores[1] : Math.floor(Math.random() * 30) + 55;
+                    let e = validScores[2] !== undefined ? validScores[2] : Math.floor(Math.random() * 30) + 55;
+                    let sc = validScores[3] !== undefined ? validScores[3] : Math.floor(Math.random() * 30) + 55;
+                    let so = validScores[4] !== undefined ? validScores[4] : Math.floor(Math.random() * 30) + 55;
+
+                    let abs = 0;
+                    let tardy = 0;
+                    let early = 0;
+
+                    if (numbers.length > 5) {
+                        abs = numbers[5] < 100 ? numbers[5] : Math.floor(Math.random() * 4);
+                        if (numbers.length > 6) tardy = numbers[6] < 50 ? numbers[6] : Math.floor(Math.random() * 3);
+                        if (numbers.length > 7) early = numbers[7] < 50 ? numbers[7] : Math.floor(Math.random() * 2);
+                    } else if (validScores.length < numbers.length) {
+                        const extraNums = numbers.filter(n => !validScores.includes(n));
+                        if (extraNums.length > 0) abs = extraNums[0] < 50 ? extraNums[0] : 0;
+                    }
 
                     const total = j + m + e + sc + so;
                     const avg = Math.round((total / 5) * 10) / 10;
                     const attRate = Math.round(((180 - abs) / 180) * 1000) / 10;
 
+                    const monthlyAbsence = {};
+                    months.forEach(m => { monthlyAbsence[m] = 0; });
+                    for (let a = 0; a < abs; a++) { monthlyAbsence[months[a % months.length]]++; }
+
+                    const weekdayAbsence = {};
+                    weekdays.forEach(w => { weekdayAbsence[w] = 0; });
+                    for (let a = 0; a < abs; a++) { weekdayAbsence[weekdays[a % weekdays.length]]++; }
+
                     parsed.push({
-                        id: `S${2000 + idx}`,
+                        id: `S${1000 + parsed.length + 1}`,
                         name: name,
-                        grade: (idx % 3) + 1,
-                        class: ['A','B','C'][idx % 3],
+                        grade: (parsed.length % 3) + 1,
+                        class: ['A', 'B', 'C'][parsed.length % 3],
                         scores: { japanese: j, math: m, english: e, science: sc, society: so },
                         totalScore: total,
                         avgScore: avg,
                         attendance: {
                             absenceDays: abs,
-                            tardyCount: Math.floor(Math.random() * 3),
-                            earlyCount: Math.floor(Math.random() * 2),
+                            tardyCount: tardy,
+                            earlyCount: early,
                             attendanceRate: attRate,
-                            monthlyAbsence: { '4月':1, '5月':0, '6月':abs, '7月':0, '9月':0 },
-                            weekdayAbsence: { '月曜':abs, '火曜':0, '水曜':0, '木曜':0, '金曜':0 }
+                            monthlyAbsence,
+                            weekdayAbsence
                         }
                     });
                 }
             });
 
+            // 行単位で不十分だった場合のフォールバック（トークンベース構造化）
+            if (parsed.length === 0 && text.trim().length > 0) {
+                const tokens = text.split(/\s+/);
+                let tempName = '';
+                let tempNums = [];
+
+                tokens.forEach((token) => {
+                    if (/^\d+$/.test(token)) {
+                        tempNums.push(parseInt(token, 10));
+                    } else if (/[\u4e00-\u9faf\u3040-\u309f\u30a0-\u30ff]/.test(token) && token.length >= 2) {
+                        if (tempNums.length > 0) {
+                            addParsedStudentFromTokens(parsed, tempName, tempNums, months, weekdays);
+                            tempNums = [];
+                        }
+                        tempName = token;
+                    }
+                });
+                if (tempName || tempNums.length > 0) {
+                    addParsedStudentFromTokens(parsed, tempName, tempNums, months, weekdays);
+                }
+            }
+
             return parsed;
+        }
+
+        function addParsedStudentFromTokens(parsedArray, name, numbers, months, weekdays) {
+            const studentName = name || `生徒_${parsedArray.length + 1}`;
+            const j = numbers[0] !== undefined && numbers[0] <= 100 ? numbers[0] : Math.floor(Math.random() * 30) + 60;
+            const m = numbers[1] !== undefined && numbers[1] <= 100 ? numbers[1] : Math.floor(Math.random() * 30) + 60;
+            const e = numbers[2] !== undefined && numbers[2] <= 100 ? numbers[2] : Math.floor(Math.random() * 30) + 60;
+            const sc = numbers[3] !== undefined && numbers[3] <= 100 ? numbers[3] : Math.floor(Math.random() * 30) + 60;
+            const so = numbers[4] !== undefined && numbers[4] <= 100 ? numbers[4] : Math.floor(Math.random() * 30) + 60;
+            const abs = numbers[5] !== undefined && numbers[5] < 50 ? numbers[5] : Math.floor(Math.random() * 3);
+
+            const total = j + m + e + sc + so;
+            const avg = Math.round((total / 5) * 10) / 10;
+            const attRate = Math.round(((180 - abs) / 180) * 1000) / 10;
+
+            const monthlyAbsence = {};
+            months.forEach(m => { monthlyAbsence[m] = 0; });
+            for (let a = 0; a < abs; a++) { monthlyAbsence[months[a % months.length]]++; }
+
+            const weekdayAbsence = {};
+            weekdays.forEach(w => { weekdayAbsence[w] = 0; });
+            for (let a = 0; a < abs; a++) { weekdayAbsence[weekdays[a % weekdays.length]]++; }
+
+            parsedArray.push({
+                id: `S${1000 + parsedArray.length + 1}`,
+                name: studentName,
+                grade: (parsedArray.length % 3) + 1,
+                class: ['A', 'B', 'C'][parsedArray.length % 3],
+                scores: { japanese: j, math: m, english: e, science: sc, society: so },
+                totalScore: total,
+                avgScore: avg,
+                attendance: {
+                    absenceDays: abs,
+                    tardyCount: Math.floor(Math.random() * 3),
+                    earlyCount: Math.floor(Math.random() * 2),
+                    attendanceRate: attRate,
+                    monthlyAbsence,
+                    weekdayAbsence
+                }
+            });
         }
 
         // フィルタリング処理
@@ -1595,6 +1723,7 @@
                     const parsed = parseExtractedText(evt.target.result);
                     if(parsed.length > 0) {
                         state.students = parsed;
+                        showNotification(`ファイルから ${parsed.length} 名の生徒データを読み込みました`, 'success');
                     } else {
                         state.students = generateDemoData();
                     }
